@@ -3,19 +3,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useState, useEffect } from 'react';
 import { User, SwapRequest, AdminAction } from '@/types';
 import { getUsers, getSwapRequests, getFeedback, getAdminActions, addAdminAction, updateUser } from '@/lib/storage';
 import { toast } from 'sonner';
-import { Shield, Users, MessageSquare, BarChart3, Ban, CheckCircle, Download } from 'lucide-react';
+import { Shield, Users, MessageSquare, BarChart3, Ban, CheckCircle, Download, Send, AlertTriangle } from 'lucide-react';
 
 export const Admin = () => {
   const { user } = useUser();
   const [users, setUsers] = useState<User[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [adminActions, setAdminActions] = useState<AdminAction[]>([]);
+  const [platformMessage, setPlatformMessage] = useState('');
 
-  const isAdmin = user?.emailAddresses[0]?.emailAddress === 'admin@skillswap.com';
+  const isAdmin = user?.emailAddresses[0]?.emailAddress === 'srivathsasmurthy2005@gmail.com';
 
   useEffect(() => {
     if (isAdmin) {
@@ -36,7 +39,7 @@ export const Admin = () => {
       adminId: user!.id,
       type: isBanned ? 'user_banned' : 'user_unbanned',
       targetId: userId,
-      reason: isBanned ? 'Inappropriate behavior' : 'Ban lifted',
+      reason: isBanned ? 'Policy violation' : 'Ban lifted',
       timestamp: new Date().toISOString()
     };
     
@@ -45,6 +48,51 @@ export const Admin = () => {
     setAdminActions(prev => [{ ...action, id: Date.now().toString(), createdAt: new Date().toISOString() }, ...prev]);
     
     toast.success(`User ${isBanned ? 'banned' : 'unbanned'} successfully`);
+  };
+
+  const handleRejectSkill = (userId: string, skill: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    const updatedUser = {
+      ...targetUser,
+      skillsOffered: targetUser.skillsOffered.filter(s => s !== skill)
+    };
+    
+    updateUser(userId, updatedUser);
+    
+    const action: Omit<AdminAction, 'id' | 'createdAt'> = {
+      adminId: user!.id,
+      type: 'delete_skill' as any,
+      targetId: userId,
+      reason: `Rejected inappropriate skill: ${skill}`,
+      timestamp: new Date().toISOString()
+    };
+    
+    addAdminAction(action);
+    setUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
+    setAdminActions(prev => [{ ...action, id: Date.now().toString(), createdAt: new Date().toISOString() }, ...prev]);
+    
+    toast.success(`Skill "${skill}" rejected and removed`);
+  };
+
+  const sendPlatformMessage = () => {
+    if (!platformMessage.trim()) return;
+
+    // In a real app, this would send notifications to all users
+    const action: Omit<AdminAction, 'id' | 'createdAt'> = {
+      adminId: user!.id,
+      type: 'delete_skill' as any, // Reusing existing type for demo
+      targetId: 'all_users',
+      reason: `Platform message: ${platformMessage}`,
+      timestamp: new Date().toISOString()
+    };
+    
+    addAdminAction(action);
+    setAdminActions(prev => [{ ...action, id: Date.now().toString(), createdAt: new Date().toISOString() }, ...prev]);
+    
+    toast.success('Platform-wide message sent to all users');
+    setPlatformMessage('');
   };
 
   const exportCSV = (data: any[], filename: string) => {
@@ -78,6 +126,9 @@ export const Admin = () => {
             <Shield className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
             <p className="text-muted-foreground">You don't have permission to access the admin panel.</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Contact support if you believe this is an error.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -151,6 +202,8 @@ export const Admin = () => {
         <TabsList>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="swaps">Swap Monitoring</TabsTrigger>
+          <TabsTrigger value="skills">Skill Moderation</TabsTrigger>
+          <TabsTrigger value="messages">Platform Messages</TabsTrigger>
           <TabsTrigger value="actions">Admin Actions</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
@@ -163,30 +216,85 @@ export const Admin = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {users.map(user => (
-                  <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                {users.map(targetUser => (
+                  <div key={targetUser.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{user.name}</span>
-                        {user.isBanned && <Badge variant="destructive">Banned</Badge>}
+                        <span className="font-medium">{targetUser.name}</span>
+                        {targetUser.isBanned && <Badge variant="destructive">Banned</Badge>}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Skills: {user.skillsOffered.join(', ')}
+                        {targetUser.email}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Location: {user.location || 'Not specified'}
+                        Skills: {targetUser.skillsOffered.join(', ')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Location: {targetUser.location || 'Not specified'}
                       </p>
                     </div>
                     <Button
-                      variant={user.isBanned ? "outline" : "destructive"}
+                      variant={targetUser.isBanned ? "outline" : "destructive"}
                       size="sm"
-                      onClick={() => handleBanUser(user.id, !user.isBanned)}
+                      onClick={() => handleBanUser(targetUser.id, !targetUser.isBanned)}
                     >
-                      {user.isBanned ? 'Unban' : 'Ban'} User
+                      {targetUser.isBanned ? 'Unban' : 'Ban'} User
                     </Button>
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="skills">
+          <Card>
+            <CardHeader>
+              <CardTitle>Skill Moderation</CardTitle>
+              <CardDescription>Review and moderate user skills</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {users.map(targetUser => 
+                  targetUser.skillsOffered.map(skill => (
+                    <div key={`${targetUser.id}-${skill}`} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{skill}</p>
+                        <p className="text-sm text-muted-foreground">by {targetUser.name}</p>
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleRejectSkill(targetUser.id, skill)}
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        Reject Skill
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="messages">
+          <Card>
+            <CardHeader>
+              <CardTitle>Platform Messages</CardTitle>
+              <CardDescription>Send platform-wide notifications to all users</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                placeholder="Enter your platform-wide message here..."
+                value={platformMessage}
+                onChange={(e) => setPlatformMessage(e.target.value)}
+                rows={4}
+              />
+              <Button onClick={sendPlatformMessage} disabled={!platformMessage.trim()}>
+                <Send className="h-4 w-4 mr-2" />
+                Send Platform Message
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -267,14 +375,21 @@ export const Admin = () => {
                 className="w-full"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export User Data
+                Export User Activity Report
               </Button>
               <Button
                 onClick={() => exportCSV(swapRequests, 'swaps_report.csv')}
                 className="w-full"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export Swap Requests
+                Export Swap Statistics
+              </Button>
+              <Button
+                onClick={() => exportCSV(getFeedback(), 'feedback_report.csv')}
+                className="w-full"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export Feedback Logs
               </Button>
               <Button
                 onClick={() => exportCSV(adminActions, 'admin_actions_report.csv')}

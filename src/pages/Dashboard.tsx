@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SwapRequest, User } from '@/types';
 import { getSwapRequests, updateSwapRequest, getUsers } from '@/lib/storage';
 import { useEffect, useState } from 'react';
-import { CheckCircle, XCircle, Clock, User as UserIcon } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, User as UserIcon, Bell } from 'lucide-react';
+import { toast } from 'sonner';
 
 export const Dashboard = () => {
   const { user } = useUser();
@@ -31,6 +32,8 @@ export const Dashboard = () => {
         req.id === requestId ? { ...req, status } : req
       )
     );
+    
+    toast.success(`Swap request ${status} successfully!`);
   };
 
   const getUserById = (id: string) => users.find(u => u.id === id);
@@ -51,11 +54,29 @@ export const Dashboard = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
         <p className="text-muted-foreground">Manage your skill swaps and profile</p>
+        
+        {pendingRequests.length > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-blue-600" />
+              <p className="text-blue-800 font-medium">
+                You have {pendingRequests.length} pending swap request{pendingRequests.length !== 1 ? 's' : ''} waiting for your response!
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="requests" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="requests">Swap Requests</TabsTrigger>
+          <TabsTrigger value="requests">
+            Swap Requests
+            {pendingRequests.length > 0 && (
+              <Badge variant="destructive" className="ml-2">
+                {pendingRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="profile">My Profile</TabsTrigger>
         </TabsList>
 
@@ -64,7 +85,7 @@ export const Dashboard = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
+                  <Bell className="h-5 w-5" />
                   Pending Requests ({pendingRequests.length})
                 </CardTitle>
                 <CardDescription>Requests waiting for your response</CardDescription>
@@ -76,12 +97,17 @@ export const Dashboard = () => {
                   pendingRequests.map(request => {
                     const fromUser = getUserById(request.fromUserId);
                     return (
-                      <div key={request.id} className="border rounded-lg p-4 space-y-3">
+                      <div key={request.id} className="border rounded-lg p-4 space-y-3 bg-blue-50 border-blue-200">
                         <div className="flex items-center gap-2">
                           <UserIcon className="h-4 w-4" />
                           <span className="font-medium">{fromUser?.name || 'Unknown User'}</span>
+                          <Badge variant="secondary">New Request</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">{request.message}</p>
+                        <div className="space-y-2">
+                          <p className="text-sm"><strong>Offering:</strong> {request.skillOffered}</p>
+                          <p className="text-sm"><strong>Wants:</strong> {request.skillWanted}</p>
+                          <p className="text-sm text-muted-foreground">{request.message}</p>
+                        </div>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -131,7 +157,11 @@ export const Dashboard = () => {
                             {request.status}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">{request.message}</p>
+                        <div className="space-y-1">
+                          <p className="text-sm"><strong>Offering:</strong> {request.skillOffered}</p>
+                          <p className="text-sm"><strong>Wants:</strong> {request.skillWanted}</p>
+                          <p className="text-sm text-muted-foreground">{request.message}</p>
+                        </div>
                       </div>
                     );
                   })

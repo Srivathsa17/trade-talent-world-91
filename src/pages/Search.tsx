@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +11,7 @@ import { getUsers } from '@/lib/storage';
 import { UserCard } from '@/components/UserCard';
 
 export const Search = () => {
+  const { user } = useUser();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
@@ -75,8 +77,13 @@ export const Search = () => {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.map(user => (
-          <UserCard key={user.id} user={user} />
+        {filteredUsers.map(targetUser => (
+          <UserCard 
+            key={targetUser.id} 
+            user={targetUser} 
+            currentUserId={user?.id}
+            showSwapButton={true}
+          />
         ))}
       </div>
 
