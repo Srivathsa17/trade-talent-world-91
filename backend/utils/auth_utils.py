@@ -8,6 +8,7 @@ import requests
 from config import get_settings
 from db.database import get_db
 from models.user import User
+from services.user_service import UserService
 
 settings = get_settings()
 security = HTTPBearer()
@@ -56,13 +57,20 @@ def get_current_user(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ) -> User:
-    """Get current user from database"""
+    """Get current user from database, create if doesn't exist"""
     user = db.query(User).filter(User.id == user_id).first()
+    
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        # Create user if they don't exist
+        # In a real app, you'd fetch from Clerk API here
+        user_data = {
+            'sub': user_id,
+            'first_name': 'User',
+            'last_name': '',
+            'full_name': 'User',
+            'email_addresses': [{'email_address': f'{user_id}@example.com'}]
+        }
+        user = UserService.sync_user_from_clerk(db, user_data, user_id)
     
     if user.is_banned:
         raise HTTPException(

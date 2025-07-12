@@ -49,6 +49,20 @@ class UserService:
         ).all()
 
     @staticmethod
+    def get_all_public_users(db: Session, exclude_user_id: str = None) -> List[User]:
+        """Get all public, active, non-banned users"""
+        query = db.query(User).filter(
+            User.is_public == True,
+            User.is_active == True,
+            User.is_banned == False
+        )
+        
+        if exclude_user_id:
+            query = query.filter(User.id != exclude_user_id)
+            
+        return query.all()
+
+    @staticmethod
     def get_all_users(db: Session) -> List[User]:
         """Get all users (admin only)"""
         return db.query(User).all()
@@ -62,3 +76,47 @@ class UserService:
             db.commit()
             db.refresh(user)
         return user
+
+    @staticmethod
+    def sync_user_from_clerk(db: Session, clerk_user_data: dict, clerk_id: str) -> User:
+        """Create or update user from Clerk data"""
+        existing_user = UserService.get_user_by_id(db, clerk_id)
+        
+        # Extract name from Clerk data
+        first_name = clerk_user_data.get('first_name', '')
+        last_name = clerk_user_data.get('last_name', '')
+        full_name = clerk_user_data.get('full_name', '')
+        
+        # Determine the name to use
+        if first_name and last_name:
+            name = f"{first_name} {last_name}"
+        elif first_name:
+            name = first_name
+        elif full_name:
+            name = full_name
+        else:
+            name = clerk_user_data.get('username', 'User')
+        
+        email = ''
+        if clerk_user_data.get('email_addresses'):
+            email = clerk_user_data['email_addresses'][0].get('email_address', '')
+        
+        if existing_user:
+            # Update existing user with latest Clerk data
+            existing_user.name = name
+            existing_user.email = email
+            db.commit()
+            db.refresh(existing_user)
+            return existing_user
+        else:
+            # Create new user
+            user_data = UserCreate(
+                name=name,
+                email=email,
+                location='',
+                skills_offered=[],
+                skills_wanted=[],
+                availability='',
+                is_public=True
+            )
+            return UserService.create_user(db, user_data, clerk_id)

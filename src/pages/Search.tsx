@@ -3,28 +3,60 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search as SearchIcon, Filter, MapPin, X } from 'lucide-react';
 import { User } from '@/types';
-import { getUsers } from '@/lib/storage';
 import { UserCard } from '@/components/UserCard';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { useQuery } from '@tanstack/react-query';
+
+const fetchUsers = async (token: string): Promise<User[]> => {
+  const response = await fetch('/api/users/search', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch users');
+  }
+  
+  const users = await response.json();
+  return users.map((user: any) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email || '',
+    location: user.location,
+    profilePicture: user.profile_picture,
+    skillsOffered: user.skills_offered || [],
+    skillsWanted: user.skills_wanted || [],
+    availability: user.availability || '',
+    isPublic: true,
+    isActive: true,
+    isBanned: false,
+    createdAt: new Date().toISOString(),
+    clerkId: user.id
+  }));
+};
 
 export const Search = () => {
-  const { user } = useUser();
-  const [users, setUsers] = useState<User[]>([]);
+  const { user, getToken } = useUser();
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    const allUsers = getUsers().filter(u => !u.isBanned && u.isPublic && u.isActive);
-    setUsers(allUsers);
-    setFilteredUsers(allUsers);
-  }, []);
+  const { data: users = [], isLoading, error } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error('No authentication token');
+      return fetchUsers(token);
+    },
+    enabled: !!user,
+  });
 
   useEffect(() => {
     let filtered = users;
@@ -60,6 +92,22 @@ export const Search = () => {
   const clearLocationFilter = () => {
     setLocationFilter('');
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="text-center">Loading users...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="text-center text-red-500">Error loading users. Please try again.</div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
