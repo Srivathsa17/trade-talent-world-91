@@ -2,16 +2,13 @@
 import { useUser } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useState, useEffect } from 'react';
 import { User } from '@/types';
-import { getUsers, updateUser } from '@/lib/storage';
+import { getUserByClerkId, updateUser, createUser } from '@/lib/storage';
 import { toast } from 'sonner';
-import { Plus, X, Edit, Save, Camera } from 'lucide-react';
+import { Edit, Save } from 'lucide-react';
 import { ProfilePhoto } from '@/components/ProfilePhoto';
 import { SkillsSection } from '@/components/SkillsSection';
 import { ProfileForm } from '@/components/ProfileForm';
@@ -31,40 +28,56 @@ export const Profile = () => {
 
   useEffect(() => {
     if (clerkUser) {
-      const users = getUsers();
-      const currentUser = users.find(u => u.id === clerkUser.id);
+      let currentUser = getUserByClerkId(clerkUser.id);
       
-      if (currentUser) {
-        setUser(currentUser);
-        setFormData({
-          name: currentUser.name,
-          location: currentUser.location || '',
-          availability: currentUser.availability || '',
-          skillsOffered: [...currentUser.skillsOffered],
-          skillsWanted: [...currentUser.skillsWanted],
-          isPublic: currentUser.isPublic
-        });
+      // If user doesn't exist, create them
+      if (!currentUser) {
+        const newUser: Omit<User, 'id' | 'createdAt'> = {
+          name: clerkUser.fullName || clerkUser.firstName || 'User',
+          email: clerkUser.emailAddresses[0]?.emailAddress || '',
+          location: '',
+          skillsOffered: [],
+          skillsWanted: [],
+          availability: '',
+          isPublic: true,
+          isActive: true,
+          isBanned: false,
+          clerkId: clerkUser.id
+        };
+        currentUser = createUser(newUser);
       }
+      
+      setUser(currentUser);
+      setFormData({
+        name: currentUser.name,
+        location: currentUser.location || '',
+        availability: currentUser.availability || '',
+        skillsOffered: [...currentUser.skillsOffered],
+        skillsWanted: [...currentUser.skillsWanted],
+        isPublic: currentUser.isPublic
+      });
     }
   }, [clerkUser]);
 
   const handleSave = () => {
     if (!clerkUser || !user) return;
 
-    const updatedUser: User = {
-      ...user,
+    const updatedUser = updateUser(user.id, {
       name: formData.name,
       location: formData.location || undefined,
       availability: formData.availability || undefined,
       skillsOffered: formData.skillsOffered,
       skillsWanted: formData.skillsWanted,
       isPublic: formData.isPublic
-    };
+    });
 
-    updateUser(clerkUser.id, updatedUser);
-    setUser(updatedUser);
-    setIsEditing(false);
-    toast.success('Profile updated successfully!');
+    if (updatedUser) {
+      setUser(updatedUser);
+      setIsEditing(false);
+      toast.success('Profile updated successfully!');
+    } else {
+      toast.error('Failed to update profile');
+    }
   };
 
   const handleCancel = () => {

@@ -2,27 +2,15 @@
 import { Link, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { Button } from './ui/button';
-import { Bell, Search, User, Settings, Users, BarChart3 } from 'lucide-react';
-import { Badge } from './ui/badge';
-import { getSwapRequests } from '@/lib/storage';
-import { useEffect, useState } from 'react';
+import { Search, User, Settings, Users, BarChart3 } from 'lucide-react';
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 export const Navigation = () => {
   const location = useLocation();
   const { user } = useUser();
-  const [pendingCount, setPendingCount] = useState(0);
 
   const isActive = (path: string) => location.pathname === path;
   const isAdmin = user?.emailAddresses[0]?.emailAddress === 'srivathsasmurthy2005@gmail.com';
-
-  useEffect(() => {
-    if (user) {
-      const requests = getSwapRequests().filter(
-        req => req.status === 'pending' && req.toUserId === user.id
-      );
-      setPendingCount(requests.length);
-    }
-  }, [user]);
 
   return (
     <nav className="bg-background border-b border-border px-4 py-3">
@@ -89,17 +77,7 @@ export const Navigation = () => {
 
         <div className="flex items-center space-x-4">
           <SignedIn>
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-4 w-4" />
-              {pendingCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {pendingCount}
-                </Badge>
-              )}
-            </Button>
+            <NotificationsDropdown />
             <UserButton afterSignOutUrl="/" />
           </SignedIn>
           
