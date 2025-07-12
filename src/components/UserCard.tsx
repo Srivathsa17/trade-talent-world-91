@@ -17,6 +17,13 @@ export const UserCard = ({ user, currentUserId, showSwapButton = true }: UserCar
   const [showSwapDialog, setShowSwapDialog] = useState(false);
 
   const canSendSwapRequest = showSwapButton && currentUserId && currentUserId !== user.id;
+  
+  console.log('UserCard debug:', {
+    showSwapButton,
+    currentUserId,
+    user: user.id,
+    canSendSwapRequest
+  });
 
   return (
     <>
@@ -52,7 +59,7 @@ export const UserCard = ({ user, currentUserId, showSwapButton = true }: UserCar
           <div>
             <h4 className="font-medium text-sm mb-2">Skills Offered</h4>
             <div className="flex flex-wrap gap-1">
-              {user.skillsOffered.map((skill, index) => (
+              {(user.skillsOffered || []).map((skill, index) => (
                 <Badge key={index} variant="default" className="text-xs">
                   {skill}
                 </Badge>
@@ -63,7 +70,7 @@ export const UserCard = ({ user, currentUserId, showSwapButton = true }: UserCar
           <div>
             <h4 className="font-medium text-sm mb-2">Skills Wanted</h4>
             <div className="flex flex-wrap gap-1">
-              {user.skillsWanted.map((skill, index) => (
+              {(user.skillsWanted || []).map((skill, index) => (
                 <Badge key={index} variant="outline" className="text-xs">
                   {skill}
                 </Badge>
@@ -82,7 +89,10 @@ export const UserCard = ({ user, currentUserId, showSwapButton = true }: UserCar
         {canSendSwapRequest && (
           <CardFooter>
             <Button 
-              onClick={() => setShowSwapDialog(true)}
+              onClick={() => {
+                console.log('Send Swap Request button clicked for user:', user.id);
+                setShowSwapDialog(true);
+              }}
               className="w-full"
               size="sm"
             >

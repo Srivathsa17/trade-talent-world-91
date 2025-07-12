@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import { useState, useMemo } from 'react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,20 +10,12 @@ import { UserCard } from '@/components/UserCard';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { useQuery } from '@tanstack/react-query';
+import { userApi } from '@/lib/api';
 
-const fetchUsers = async (token: string): Promise<User[]> => {
-  const response = await fetch('/api/users/search', {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+const fetchUsers = async (token: string | null): Promise<User[]> => {
+  const users = await userApi.searchUsers(token);
   
-  if (!response.ok) {
-    throw new Error('Failed to fetch users');
-  }
-  
-  const users = await response.json();
+  // Transform backend data (snake_case) to frontend format (camelCase)
   return users.map((user: any) => ({
     id: user.id,
     name: user.name,
@@ -33,32 +25,31 @@ const fetchUsers = async (token: string): Promise<User[]> => {
     skillsOffered: user.skills_offered || [],
     skillsWanted: user.skills_wanted || [],
     availability: user.availability || '',
-    isPublic: true,
-    isActive: true,
-    isBanned: false,
-    createdAt: new Date().toISOString(),
+    isPublic: user.is_public || true,
+    isActive: user.is_active || true,
+    isBanned: user.is_banned || false,
+    createdAt: user.created_at || new Date().toISOString(),
     clerkId: user.id
   }));
 };
 
 export const Search = () => {
-  const { user, getToken } = useUser();
+  const { user } = useUser();
+  const { getToken } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   const { data: users = [], isLoading, error } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
       const token = await getToken();
-      if (!token) throw new Error('No authentication token');
       return fetchUsers(token);
     },
     enabled: !!user,
   });
 
-  useEffect(() => {
+  const filteredUsers = useMemo(() => {
     let filtered = users;
 
     // Apply search term filter
@@ -67,10 +58,10 @@ export const Search = () => {
       filtered = filtered.filter(user => {
         const nameMatch = user.name.toLowerCase().includes(searchLower);
         const locationMatch = user.location?.toLowerCase().includes(searchLower);
-        const skillsOfferedMatch = user.skillsOffered.some(skill => 
+        const skillsOfferedMatch = (user.skillsOffered || []).some(skill => 
           skill.toLowerCase().includes(searchLower)
         );
-        const skillsWantedMatch = user.skillsWanted.some(skill => 
+        const skillsWantedMatch = (user.skillsWanted || []).some(skill => 
           skill.toLowerCase().includes(searchLower)
         );
 
@@ -86,7 +77,7 @@ export const Search = () => {
       );
     }
 
-    setFilteredUsers(filtered);
+    return filtered;
   }, [searchTerm, locationFilter, users]);
 
   const clearLocationFilter = () => {
@@ -102,9 +93,15 @@ export const Search = () => {
   }
 
   if (error) {
+    console.error('Search error:', error);
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="text-center text-red-500">Error loading users. Please try again.</div>
+        <div className="text-center text-red-500">
+          <p className="mb-2">Error loading users. Please try again.</p>
+          <p className="text-sm text-muted-foreground">
+            Make sure you're signed in and the backend server is running.
+          </p>
+        </div>
       </div>
     );
   }
@@ -189,10 +186,19 @@ export const Search = () => {
         ))}
       </div>
 
-      {filteredUsers.length === 0 && (searchTerm || locationFilter) && (
+      {filteredUsers.length === 0 && !isLoading && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground text-lg">No users found matching your search.</p>
-          <p className="text-muted-foreground">Try different keywords or check the spelling.</p>
+          {searchTerm || locationFilter ? (
+            <>
+              <p className="text-muted-foreground text-lg">No users found matching your search.</p>
+              <p className="text-muted-foreground">Try different keywords or check the spelling.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-lg">No users found.</p>
+              <p className="text-muted-foreground">Be the first to join and share your skills!</p>
+            </>
+          )}
         </div>
       )}
     </div>

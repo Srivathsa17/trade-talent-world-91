@@ -47,6 +47,11 @@ class SwapService:
         ).all()
 
     @staticmethod
+    def get_all_swaps(db: Session) -> List[SwapRequest]:
+        """Get all swap requests (admin only)"""
+        return db.query(SwapRequest).all()
+
+    @staticmethod
     def get_swap_by_id(db: Session, swap_id: str) -> Optional[SwapRequest]:
         """Get swap request by ID"""
         return db.query(SwapRequest).filter(SwapRequest.id == swap_id).first()

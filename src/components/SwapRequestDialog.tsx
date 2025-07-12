@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User } from '@/types';
-import { createSwapRequest, getUserByClerkId } from '@/lib/storage';
+import { userApi, swapApi } from '@/lib/api';
+import { useAuth } from '@clerk/clerk-react';
 import { toast } from 'sonner';
 import { Send } from 'lucide-react';
 
@@ -19,23 +20,49 @@ interface SwapRequestDialogProps {
 }
 
 export const SwapRequestDialog = ({ targetUser, currentUserId, open, onOpenChange }: SwapRequestDialogProps) => {
+  const { getToken } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedSkillOffered, setSelectedSkillOffered] = useState('');
   const [selectedSkillWanted, setSelectedSkillWanted] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (currentUserId) {
-      const user = getUserByClerkId(currentUserId);
-      setCurrentUser(user);
+    const loadCurrentUser = async () => {
+      if (!currentUserId || !getToken) return;
+
+      try {
+        setIsLoading(true);
+        const token = await getToken();
+        const profile = await userApi.getProfile(token) as any;
+        
+        // Transform backend data to frontend format
+        const transformedUser = {
+          ...profile,
+          skillsOffered: profile.skills_offered || [],
+          skillsWanted: profile.skills_wanted || [],
+          isPublic: profile.is_public
+        };
+        
+        setCurrentUser(transformedUser);
+      } catch (error) {
+        console.error('Failed to load current user:', error);
+        toast.error('Failed to load your profile');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (open) {
+      loadCurrentUser();
     }
-  }, [currentUserId]);
+  }, [currentUserId, getToken, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedSkillOffered || !selectedSkillWanted || !message.trim() || !currentUser) {
+    if (!selectedSkillOffered || !selectedSkillWanted || !message.trim() || !currentUser || !getToken) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -43,16 +70,18 @@ export const SwapRequestDialog = ({ targetUser, currentUserId, open, onOpenChang
     setIsSubmitting(true);
     
     try {
-      createSwapRequest({
-        fromUserId: currentUserId,
-        toUserId: targetUser.id,
-        fromUserName: currentUser.name,
-        toUserName: targetUser.name,
-        skillOffered: selectedSkillOffered,
-        skillWanted: selectedSkillWanted,
-        message: message.trim(),
-        status: 'pending'
-      });
+      const token = await getToken();
+      
+      // Transform frontend data to backend format (snake_case)
+      const swapRequestData = {
+        to_user_id: targetUser.id,
+        skill_offered: selectedSkillOffered,
+        skill_wanted: selectedSkillWanted,
+        message: message.trim()
+      };
+      
+      console.log('Sending swap request:', swapRequestData);
+      await swapApi.createSwapRequest(token, swapRequestData);
 
       toast.success('Swap request sent successfully!');
       onOpenChange(false);
@@ -62,6 +91,7 @@ export const SwapRequestDialog = ({ targetUser, currentUserId, open, onOpenChang
       setSelectedSkillWanted('');
       setMessage('');
     } catch (error) {
+      console.error('Failed to send swap request:', error);
       toast.error('Failed to send swap request');
     } finally {
       setIsSubmitting(false);
@@ -79,6 +109,19 @@ export const SwapRequestDialog = ({ targetUser, currentUserId, open, onOpenChang
       resetForm();
     }
   }, [open]);
+
+  if (isLoading) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading your profile...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (!currentUser) {
     return null;

@@ -1,5 +1,5 @@
 
-import jwt
+from jose import jwt, JWTError
 from fastapi import HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -29,9 +29,9 @@ def verify_clerk_token(token: str) -> dict:
     try:
         # For development, we'll decode without verification
         # In production, you should verify with Clerk's public key
-        decoded = jwt.decode(token, options={"verify_signature": False})
+        decoded = jwt.decode(token, key="", options={"verify_signature": False})
         return decoded
-    except jwt.InvalidTokenError:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token"
@@ -53,6 +53,14 @@ def get_current_user_id(
     
     return user_id
 
+def get_current_user_data(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> dict:
+    """Extract current user data from Clerk JWT token"""
+    token = credentials.credentials
+    user_data = verify_clerk_token(token)
+    return user_data
+
 def get_current_user(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
@@ -72,7 +80,7 @@ def get_current_user(
         }
         user = UserService.sync_user_from_clerk(db, user_data, user_id)
     
-    if user.is_banned:
+    if user.is_banned == True:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is banned"

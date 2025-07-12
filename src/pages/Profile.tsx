@@ -1,12 +1,12 @@
 
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useState, useEffect } from 'react';
 import { User } from '@/types';
-import { getUserByClerkId, updateUser, createUser } from '@/lib/storage';
+import { userApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { Edit, Save } from 'lucide-react';
 import { ProfilePhoto } from '@/components/ProfilePhoto';
@@ -15,8 +15,10 @@ import { ProfileForm } from '@/components/ProfileForm';
 
 export const Profile = () => {
   const { user: clerkUser } = useUser();
+  const { getToken } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     location: '',
@@ -27,55 +29,92 @@ export const Profile = () => {
   });
 
   useEffect(() => {
-    if (clerkUser) {
-      let currentUser = getUserByClerkId(clerkUser.id);
-      
-      // If user doesn't exist, create them
-      if (!currentUser) {
-        const newUser: Omit<User, 'id' | 'createdAt'> = {
-          name: clerkUser.fullName || clerkUser.firstName || 'User',
-          email: clerkUser.emailAddresses[0]?.emailAddress || '',
-          location: '',
-          skillsOffered: [],
-          skillsWanted: [],
-          availability: '',
-          isPublic: true,
-          isActive: true,
-          isBanned: false,
-          clerkId: clerkUser.id
-        };
-        currentUser = createUser(newUser);
+    const loadUserProfile = async () => {
+      if (!clerkUser || !getToken) return;
+
+      try {
+        setIsLoading(true);
+        const token = await getToken();
+        
+        // Try to get user profile from backend
+        try {
+          const profile = await userApi.getProfile(token) as any;
+          
+          // Transform backend data (snake_case) to frontend format (camelCase)
+          const transformedProfile = {
+            ...profile,
+            skillsOffered: profile.skills_offered || [],
+            skillsWanted: profile.skills_wanted || [],
+            isPublic: profile.is_public
+          };
+          
+          setUser(transformedProfile);
+          setFormData({
+            name: profile.name,
+            location: profile.location || '',
+            availability: profile.availability || '',
+            skillsOffered: profile.skills_offered || [],
+            skillsWanted: profile.skills_wanted || [],
+            isPublic: profile.is_public
+          });
+        } catch (error) {
+          // If user doesn't exist, sync from Clerk
+          console.log('User not found, syncing from Clerk...');
+          const syncedUser = await userApi.syncFromClerk(token) as any;
+          
+          // Transform backend data (snake_case) to frontend format (camelCase)
+          const transformedUser = {
+            ...syncedUser,
+            skillsOffered: syncedUser.skills_offered || [],
+            skillsWanted: syncedUser.skills_wanted || [],
+            isPublic: syncedUser.is_public
+          };
+          
+          setUser(transformedUser);
+          setFormData({
+            name: syncedUser.name,
+            location: syncedUser.location || '',
+            availability: syncedUser.availability || '',
+            skillsOffered: syncedUser.skills_offered || [],
+            skillsWanted: syncedUser.skills_wanted || [],
+            isPublic: syncedUser.is_public
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+        toast.error('Failed to load profile');
+      } finally {
+        setIsLoading(false);
       }
+    };
+
+    loadUserProfile();
+  }, [clerkUser, getToken]);
+
+  const handleSave = async () => {
+    if (!clerkUser || !user || !getToken) return;
+
+    try {
+      const token = await getToken();
       
-      setUser(currentUser);
-      setFormData({
-        name: currentUser.name,
-        location: currentUser.location || '',
-        availability: currentUser.availability || '',
-        skillsOffered: [...currentUser.skillsOffered],
-        skillsWanted: [...currentUser.skillsWanted],
-        isPublic: currentUser.isPublic
-      });
-    }
-  }, [clerkUser]);
+      // Transform frontend data (camelCase) to backend format (snake_case)
+      const updateData = {
+        name: formData.name,
+        location: formData.location || undefined,
+        availability: formData.availability || undefined,
+        skills_offered: formData.skillsOffered,
+        skills_wanted: formData.skillsWanted,
+        is_public: formData.isPublic
+      };
+      
+      console.log('Sending update data:', updateData);
+      const updatedUser = await userApi.updateProfile(token, updateData);
 
-  const handleSave = () => {
-    if (!clerkUser || !user) return;
-
-    const updatedUser = updateUser(user.id, {
-      name: formData.name,
-      location: formData.location || undefined,
-      availability: formData.availability || undefined,
-      skillsOffered: formData.skillsOffered,
-      skillsWanted: formData.skillsWanted,
-      isPublic: formData.isPublic
-    });
-
-    if (updatedUser) {
       setUser(updatedUser);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
-    } else {
+    } catch (error) {
+      console.error('Failed to update profile:', error);
       toast.error('Failed to update profile');
     }
   };
@@ -87,8 +126,8 @@ export const Profile = () => {
         name: user.name,
         location: user.location || '',
         availability: user.availability || '',
-        skillsOffered: [...user.skillsOffered],
-        skillsWanted: [...user.skillsWanted],
+        skillsOffered: [...(user.skillsOffered || [])],
+        skillsWanted: [...(user.skillsWanted || [])],
         isPublic: user.isPublic
       });
     }
@@ -98,6 +137,17 @@ export const Profile = () => {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
         <p>Please sign in to view your profile.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
       </div>
     );
   }

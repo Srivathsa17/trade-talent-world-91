@@ -1,4 +1,4 @@
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,26 +7,77 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useState, useEffect } from 'react';
 import { User, SwapRequest, AdminAction } from '@/types';
-import { getUsers, getSwapRequests, getFeedback, getAdminActions, addAdminAction, updateUser } from '@/lib/storage';
+import { userApi, swapApi, adminApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { Shield, Users, MessageSquare, BarChart3, Ban, CheckCircle, Download, Send, AlertTriangle } from 'lucide-react';
 
 export const Admin = () => {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [adminActions, setAdminActions] = useState<AdminAction[]>([]);
   const [platformMessage, setPlatformMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = user?.emailAddresses[0]?.emailAddress === 'srivathsasmurthy2005@gmail.com';
 
   useEffect(() => {
-    if (isAdmin) {
-      setUsers(getUsers());
-      setSwapRequests(getSwapRequests());
-      setAdminActions(getAdminActions());
-    }
-  }, [isAdmin]);
+    const loadAdminData = async () => {
+      if (!isAdmin || !getToken) return;
+
+      try {
+        setIsLoading(true);
+        const token = await getToken();
+        
+        // Load users
+        const allUsers = await userApi.searchUsers(token);
+        const transformedUsers = allUsers.map((user: any) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email || '',
+          location: user.location,
+          profilePicture: user.profile_picture,
+          skillsOffered: user.skills_offered || [],
+          skillsWanted: user.skills_wanted || [],
+          availability: user.availability || '',
+          isPublic: user.is_public || true,
+          isActive: user.is_active || true,
+          isBanned: user.is_banned || false,
+          createdAt: user.created_at || new Date().toISOString(),
+          clerkId: user.id
+        }));
+        setUsers(transformedUsers);
+        
+        // Load swap requests
+        const requests = await swapApi.getSwapRequests(token);
+        const transformedRequests = requests.map((req: any) => ({
+          id: req.id,
+          fromUserId: req.from_user_id,
+          toUserId: req.to_user_id,
+          fromUserName: req.from_user_name,
+          toUserName: req.to_user_name,
+          skillOffered: req.skill_offered,
+          skillWanted: req.skill_wanted,
+          message: req.message,
+          status: req.status,
+          createdAt: req.created_at,
+          updatedAt: req.updated_at
+        }));
+        setSwapRequests(transformedRequests);
+        
+        // For now, we'll use empty admin actions since backend doesn't have this yet
+        setAdminActions([]);
+      } catch (error) {
+        console.error('Failed to load admin data:', error);
+        toast.error('Failed to load admin data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAdminData();
+  }, [isAdmin, getToken]);
 
   const handleBanUser = (userId: string, isBanned: boolean) => {
     const targetUser = users.find(u => u.id === userId);
@@ -131,6 +182,17 @@ export const Admin = () => {
             </p>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading admin panel...</p>
+        </div>
       </div>
     );
   }

@@ -31,11 +31,15 @@ class UserService:
             return None
         
         update_data = user_data.dict(exclude_unset=True)
+        print(f"Updating user {user_id} with data: {update_data}")
+        
         for field, value in update_data.items():
+            print(f"Setting {field} = {value}")
             setattr(user, field, value)
         
         db.commit()
         db.refresh(user)
+        print(f"After update - skills_offered: {user.skills_offered}, skills_wanted: {user.skills_wanted}")
         return user
 
     @staticmethod
@@ -49,7 +53,7 @@ class UserService:
         ).all()
 
     @staticmethod
-    def get_all_public_users(db: Session, exclude_user_id: str = None) -> List[User]:
+    def get_all_public_users(db: Session, exclude_user_id: Optional[str] = None) -> List[User]:
         """Get all public, active, non-banned users"""
         query = db.query(User).filter(
             User.is_public == True,

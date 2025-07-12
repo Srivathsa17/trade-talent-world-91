@@ -1,39 +1,106 @@
 
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SwapRequest, User } from '@/types';
-import { getSwapRequests, updateSwapRequest, getUsers } from '@/lib/storage';
+import { swapApi, userApi } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, Clock, User as UserIcon, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const Dashboard = () => {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      const requests = getSwapRequests().filter(
-        req => req.toUserId === user.id || req.fromUserId === user.id
-      );
-      setSwapRequests(requests);
-      setUsers(getUsers());
-    }
-  }, [user]);
+    const loadDashboardData = async () => {
+      if (!user || !getToken) return;
 
-  const handleSwapResponse = (requestId: string, status: 'accepted' | 'rejected') => {
-    updateSwapRequest(requestId, { status });
-    setSwapRequests(prev => 
-      prev.map(req => 
-        req.id === requestId ? { ...req, status } : req
-      )
-    );
-    
-    toast.success(`Swap request ${status} successfully!`);
+      try {
+        setIsLoading(true);
+        const token = await getToken();
+        
+        // Load swap requests
+        const requests = await swapApi.getSwapRequests(token);
+        console.log('Dashboard: Raw swap requests from API:', requests);
+        
+        // Transform backend data to frontend format
+        const transformedRequests = requests.map((req: any) => ({
+          id: req.id,
+          fromUserId: req.from_user_id,
+          toUserId: req.to_user_id,
+          fromUserName: req.from_user_name,
+          toUserName: req.to_user_name,
+          skillOffered: req.skill_offered,
+          skillWanted: req.skill_wanted,
+          message: req.message,
+          status: req.status,
+          createdAt: req.created_at,
+          updatedAt: req.updated_at
+        }));
+        
+        console.log('Dashboard: Transformed swap requests:', transformedRequests);
+        console.log('Dashboard: Current user ID:', user.id);
+        setSwapRequests(transformedRequests);
+        
+        // Load users for display
+        const allUsers = await userApi.searchUsers(token);
+        const transformedUsers = allUsers.map((user: any) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email || '',
+          location: user.location,
+          profilePicture: user.profile_picture,
+          skillsOffered: user.skills_offered || [],
+          skillsWanted: user.skills_wanted || [],
+          availability: user.availability || '',
+          isPublic: user.is_public || true,
+          isActive: user.is_active || true,
+          isBanned: user.is_banned || false,
+          createdAt: user.created_at || new Date().toISOString(),
+          clerkId: user.id
+        }));
+        
+        setUsers(transformedUsers);
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [user, getToken]);
+
+  const handleSwapResponse = async (requestId: string, status: 'accepted' | 'rejected') => {
+    if (!getToken) return;
+
+    try {
+      const token = await getToken();
+      
+      if (status === 'accepted') {
+        await swapApi.acceptSwapRequest(token, requestId);
+      } else {
+        await swapApi.rejectSwapRequest(token, requestId);
+      }
+      
+      setSwapRequests(prev => 
+        prev.map(req => 
+          req.id === requestId ? { ...req, status } : req
+        )
+      );
+      
+      toast.success(`Swap request ${status} successfully!`);
+    } catch (error) {
+      console.error('Failed to update swap request:', error);
+      toast.error('Failed to update swap request');
+    }
   };
 
   const getUserById = (id: string) => users.find(u => u.id === id);
@@ -45,6 +112,17 @@ export const Dashboard = () => {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
         <p>Please sign in to view your dashboard.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     );
   }

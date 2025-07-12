@@ -40,3 +40,13 @@ def ban_user(
             detail="User not found"
         )
     return user
+
+@router.get("/swaps", response_model=List[dict])
+def get_all_swaps(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(verify_admin)
+):
+    """Get all swap requests (admin only)"""
+    from services.swap_service import SwapService
+    swaps = SwapService.get_all_swaps(db)
+    return swaps

@@ -13,6 +13,7 @@ import { Profile } from "./pages/Profile";
 import { Admin } from "./pages/Admin";
 import { initializeData } from "./lib/storage";
 import NotFound from "./pages/NotFound";
+import { UserSyncProvider } from "./components/UserSyncProvider";
 
 const queryClient = new QueryClient();
 
@@ -27,17 +28,19 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <div className="min-h-screen bg-background">
-            <Navigation />
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </div>
+          <UserSyncProvider>
+            <div className="min-h-screen bg-background">
+              <Navigation />
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/search" element={<Search />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </div>
+          </UserSyncProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
